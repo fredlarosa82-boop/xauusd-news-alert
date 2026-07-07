@@ -10,6 +10,18 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.png">
 <title>🔴 XAUUSD News Alert</title>
+
+<!-- OneSignal -->
+<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+<script>
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  OneSignalDeferred.push(async function(OneSignal) {
+    await OneSignal.init({
+      appId: "d1992efd-455a-4a57-8aa2-2f2b1e31ed90",
+    });
+  });
+</script>
+
 <style>
   @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;600;700&display=swap');
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -60,16 +72,11 @@
   .add-input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; color: var(--text); font-family: 'Inter', sans-serif; font-size: 13px; }
   .add-input:focus { outline: none; border-color: var(--gold); }
   .add-input::placeholder { color: var(--muted); }
-  .add-btn { background: var(--gold); color: #000; border: none; border-radius: 6px; padding: 8px 14px; font-weight: 700; font-size: 13px; cursor: pointer; white-space: nowrap; }
-  .add-btn:hover { opacity: 0.9; }
+  .add-btn { background: var(--gold); color: #000; border: none; border-radius: 6px; padding: 8px 14px; font-weight: 700; font-size: 13px; cursor: pointer; }
   .ff-btn { width: 100%; padding: 11px; background: var(--surface); border: 1px solid rgba(240,180,41,0.3); border-radius: 8px; color: var(--gold); font-family: 'Inter', sans-serif; font-size: 13px; cursor: pointer; margin-bottom: 8px; }
-  .ff-btn:hover { background: var(--gold-dim); }
+  .notif-btn { width: 100%; padding: 11px; background: var(--surface); border: 1px solid rgba(34,197,94,0.3); border-radius: 8px; color: var(--green); font-family: 'Inter', sans-serif; font-size: 13px; cursor: pointer; margin-bottom: 8px; }
   .refresh-info { text-align: center; font-size: 11px; color: var(--muted); margin-top: 10px; font-family: 'JetBrains Mono', monospace; }
   .no-news { text-align: center; padding: 24px; color: var(--muted); font-size: 13px; }
-  .install-banner { display: none; background: var(--gold-dim); border: 1px solid rgba(240,180,41,0.3); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; cursor: pointer; }
-  .install-banner.show { display: flex; align-items: center; gap: 10px; }
-  .install-text strong { color: var(--gold); font-size: 13px; display: block; }
-  .install-text span { font-size: 11px; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -79,16 +86,6 @@
   <div class="live-badge"><div class="live-dot"></div><span>LIVE</span></div>
 </header>
 
-<!-- Install banner -->
-<div class="install-banner" id="installBanner" onclick="installApp()">
-  <div style="font-size:20px">📲</div>
-  <div class="install-text">
-    <strong>Installer l'app</strong>
-    <span>Ajouter à l'écran d'accueil</span>
-  </div>
-</div>
-
-<!-- Alert -->
 <div class="alert-banner" id="alertBanner">
   <div class="alert-icon">🚨</div>
   <div class="alert-text">
@@ -97,13 +94,11 @@
   </div>
 </div>
 
-<!-- Clock -->
 <div class="time-display">
   <div class="clock" id="clock">--:--:--</div>
   <div class="date" id="dateDisplay">--</div>
 </div>
 
-<!-- Next news -->
 <div class="next-news" id="nextNewsBox" style="display:none">
   <div>
     <div class="next-label">⏱ Prochaine news rouge</div>
@@ -112,11 +107,10 @@
   <div class="next-countdown" id="nextCountdown">--:--</div>
 </div>
 
-<!-- Add manual news -->
 <div class="add-section">
   <div class="add-title">➕ Ajouter une news ponctuelle</div>
   <div class="add-row">
-    <input class="add-input" id="inputTime" type="time" placeholder="Heure">
+    <input class="add-input" id="inputTime" type="time">
     <input class="add-input" id="inputName" type="text" placeholder="Nom (ex: PMI Flash)">
   </div>
   <div class="add-row">
@@ -125,16 +119,11 @@
   </div>
 </div>
 
-<!-- Today news -->
 <div class="section-title">📅 Aujourd'hui – News Impact Rouge</div>
-<div class="news-list" id="newsList">
-  <div class="no-news">Chargement...</div>
-</div>
+<div class="news-list" id="newsList"></div>
 
-<button class="ff-btn" onclick="window.open('https://www.forexfactory.com/calendar?day=today','_blank')">
-  🌐 Ouvrir ForexFactory (vérifier les news)
-</button>
-
+<button class="notif-btn" onclick="enableNotifications()">🔔 Activer les notifications push</button>
+<button class="ff-btn" onclick="window.open('https://www.forexfactory.com/calendar?day=today','_blank')">🌐 Ouvrir ForexFactory</button>
 <div class="refresh-info" id="lastRefresh">--</div>
 
 <script>
@@ -187,8 +176,8 @@ function addManualNews() {
   updateNews();
 }
 
-function deleteManualNews(index) {
-  manualNews.splice(index, 1);
+function deleteManualNews(idx) {
+  manualNews.splice(idx, 1);
   saveManualNews(manualNews);
   updateNews();
 }
@@ -200,9 +189,9 @@ function getTodayNews() {
   return [...weekly, ...manualNews].sort((a, b) => a.time.localeCompare(b.time));
 }
 
-function getNewsDateTime(timeStr) {
+function getNewsDateTime(t) {
   const now = new Date();
-  const [h, m] = timeStr.split(':').map(Number);
+  const [h, m] = t.split(':').map(Number);
   return new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0);
 }
 
@@ -242,14 +231,32 @@ function playAlert() {
   } catch(e) {}
 }
 
+function sendPushNotification(title, message) {
+  try {
+    OneSignalDeferred.push(function(OneSignal) {
+      OneSignal.User.addTag("trader", "xauusd");
+    });
+  } catch(e) {}
+}
+
+async function enableNotifications() {
+  try {
+    OneSignalDeferred.push(async function(OneSignal) {
+      await OneSignal.Notifications.requestPermission();
+      alert('✅ Notifications activées ! Tu recevras des alertes même app fermée.');
+    });
+  } catch(e) {
+    alert('Erreur activation notifications');
+  }
+}
+
 function updateNews() {
   const news = getTodayNews();
   const now = new Date();
   const list = document.getElementById('newsList');
-  let manualIndex = 0;
 
   if (news.length === 0) {
-    list.innerHTML = '<div class="no-news">✅ Aucune news rouge aujourd\'hui<br><small style="display:block;margin-top:6px">Ajoute une news ponctuelle si besoin</small></div>';
+    list.innerHTML = '<div class="no-news">✅ Aucune news rouge aujourd\'hui</div>';
     document.getElementById('nextNewsBox').style.display = 'none';
     document.getElementById('alertBanner').classList.remove('show');
     return;
@@ -271,12 +278,6 @@ function updateNews() {
       if (!alertPlayed[key]) {
         alertPlayed[key] = true;
         playAlert();
-        if (Notification.permission === 'granted') {
-          new Notification('🚨 NEWS ROUGE – XAUUSD', {
-            body: `${nextNews.name} dans ${formatCountdown(diff)} — Ferme tes positions !`,
-            icon: 'icon.png'
-          });
-        }
       }
     } else {
       document.getElementById('alertBanner').classList.remove('show');
@@ -286,61 +287,31 @@ function updateNews() {
     document.getElementById('alertBanner').classList.remove('show');
   }
 
-  // Compteur pour index manuel
-  const manualCounts = {};
-  
-  list.innerHTML = news.map((n, i) => {
+  list.innerHTML = news.map((n) => {
     const dt = getNewsDateTime(n.time);
     const diff = dt - now;
     const passed = diff < 0;
     const imminent = diff > 0 && diff < 15 * 60 * 1000;
-    const mIdx = n.manual ? manualNews.indexOf(n) : -1;
-
     return `
       <div class="news-card ${imminent?'imminent':''} ${passed?'passed':''}">
         <div class="news-time">${n.time}</div>
         <div class="impact-dot"></div>
         <div class="news-info">
           <div class="news-name">${n.name}</div>
-          <div class="news-meta">${n.currency} <span class="tag">ROUGE</span>${n.manual ? '<span class="manual-tag">PONCTUELLE</span>' : ''}</div>
+          <div class="news-meta">${n.currency} <span class="tag">ROUGE</span>${n.manual?'<span class="manual-tag">PONCTUELLE</span>':''}</div>
         </div>
-        <div class="news-timer ${imminent?'soon':''}">${passed ? '✓' : formatCountdown(diff)}</div>
-        ${n.manual ? `<button class="delete-btn" onclick="deleteManualNews(${manualNews.indexOf(n)})">✕</button>` : ''}
+        <div class="news-timer ${imminent?'soon':''}">${passed?'✓':formatCountdown(diff)}</div>
+        ${n.manual?`<button class="delete-btn" onclick="deleteManualNews(${manualNews.indexOf(n)})">✕</button>`:''}
       </div>`;
   }).join('');
 
   document.getElementById('lastRefresh').textContent = `MAJ : ${new Date().toLocaleTimeString('fr-FR')}`;
 }
 
-// PWA Install
-let deferredPrompt;
-window.addEventListener('beforeinstallprompt', e => {
-  e.preventDefault();
-  deferredPrompt = e;
-  document.getElementById('installBanner').classList.add('show');
-});
-
-function installApp() {
-  if (deferredPrompt) {
-    deferredPrompt.prompt();
-    deferredPrompt.userChoice.then(() => {
-      deferredPrompt = null;
-      document.getElementById('installBanner').classList.remove('show');
-    });
-  }
-}
-
-// Notifications permission
-if ('Notification' in window && Notification.permission === 'default') {
-  Notification.requestPermission();
-}
-
-// Service Worker
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js');
+  navigator.serviceWorker.register('OneSignalSDKWorker.js');
 }
 
-// Init
 updateClock();
 updateNews();
 setInterval(() => { updateClock(); updateNews(); }, 1000);
